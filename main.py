@@ -77,7 +77,7 @@ if mode == 0:
         sys.exit(0)
 
     binary_video_file = filedialog.asksaveasfilename(initialdir=".", title="Save Binary Video As",
-                                          filetypes=(("Binary Video", "*.avi"),), defaultextension='.avi')
+                                          filetypes=(("Binary Video", "*.mp4"),), defaultextension='.mp4')
 
     if binary_video_file:
         data = open(real_file, 'rb').read()
@@ -91,7 +91,7 @@ if mode == 0:
 
 else:
     binary_video_file = filedialog.askopenfilename(initialdir=".", title="Select Binary Video",
-                                          filetypes=(("Video files", "*.avi;*.mp4;*.mkv;*.mov;*.wmv;*.flv;*.m4v"),), defaultextension='.avi')
+                                          filetypes=(("Video files", "*.avi;*.mp4;*.mkv;*.mov;*.wmv;*.flv;*.m4v"),), defaultextension='.mp4')
 
     if os.path.exists(binary_video_file):
         print(colored(f'[UPDATE] Reading "{binary_video_file}"', Fore.LIGHTBLUE_EX))

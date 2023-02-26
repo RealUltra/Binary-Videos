@@ -140,7 +140,7 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
 
     bin_data = filename_len_bin + filename_bin + bin_data
 
-    fourcc = cv2.VideoWriter_fourcc(*"FFV1")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(video_filename, fourcc, fps, (width, height))
 
     n = 0
