@@ -4,21 +4,9 @@ from tkinter import filedialog
 import os
 import sys
 
-try:
-    from colorama import init, Fore, Back, Style
-except:
-    cmd = f'"{sys.executable}" -m pip install colorama'
-    os.system(cmd)
-    from colorama import init, Fore, Back, Style
-
-def colored(text, color):
-    return f"{color}{text}{Style.RESET_ALL}"
-
 def split_filename(filename):
     split = filename.split('.')
     return ".".join(split[:-1]), split[-1]
-
-init()
 
 print(colored("###### BINARY VIDEO CREATOR #######\n", Fore.GREEN))
 
@@ -46,27 +34,28 @@ default_width = 400
 default_height = 400
 default_framerate = 10
 
-while True:
-    print(colored("1) Optimal Compression Resistance", Fore.LIGHTMAGENTA_EX))
-    print(colored("2) Paranoid Compression Resistance (totally won't destroy ur pc)", Fore.LIGHTMAGENTA_EX))
-    print(colored("3) No Compression Resistance (Even the slightest compression will make you lose your life's work)",
-                  Fore.LIGHTMAGENTA_EX))
-    inp = input(colored("Enter 1, 2 or 3: ", Fore.MAGENTA)).strip()
-
-    if inp == "1":
-        width_factor, height_factor = 4, 4
-        break
-    elif inp == "2":
-        width_factor, height_factor = 6, 6
-        break
-    elif inp == "3":
-        width_factor, height_factor = 1, 1
-        break
-    else:
-        print(colored("[ERROR] Invalid Input!\n", Fore.RED))
-print()
-
 if mode == 0:
+    while True:
+        print(colored("1) Optimal Compression Resistance", Fore.LIGHTMAGENTA_EX))
+        print(colored("2) Paranoid Compression Resistance (totally won't destroy ur pc)", Fore.LIGHTMAGENTA_EX))
+        print(
+            colored("3) No Compression Resistance (Even the slightest compression will make you lose your life's work)",
+                    Fore.LIGHTMAGENTA_EX))
+        inp = input(colored("Enter 1, 2 or 3: ", Fore.MAGENTA)).strip()
+
+        if inp == "1":
+            width_factor, height_factor = 4, 4
+            break
+        elif inp == "2":
+            width_factor, height_factor = 6, 6
+            break
+        elif inp == "3":
+            width_factor, height_factor = 1, 1
+            break
+        else:
+            print(colored("[ERROR] Invalid Input!\n", Fore.RED))
+    print()
+
     width, height = 1920, 1080
     fps = 30
 
@@ -95,14 +84,18 @@ else:
 
     if os.path.exists(binary_video_file):
         print(colored(f'[UPDATE] Reading "{binary_video_file}"', Fore.LIGHTBLUE_EX))
-        filename, data = decode(binary_video_file, width_factor, height_factor)
+        filename, data = decode(binary_video_file)
 
-        file_name, ext = split_filename(filename)
-        file_name = file_name + " [Recovered]"
-        filename = file_name + "." + ext
-        path = os.path.join(os.path.dirname(binary_video_file), filename)
+        if filename and data:
+            file_name, ext = split_filename(filename)
+            file_name = file_name + " [Recovered]"
+            filename = file_name + "." + ext
+            path = os.path.join(os.path.dirname(binary_video_file), filename)
 
-        with open(path, 'wb') as f:
-            f.write(data)
+            with open(path, 'wb') as f:
+                f.write(data)
 
-        print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
+            print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
+
+        else:
+            print(colored(f'[ERROR] Could not decode binary video!', Fore.RED))

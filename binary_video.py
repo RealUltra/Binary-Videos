@@ -35,10 +35,46 @@ except:
     os.system(cmd)
     from bs4 import UnicodeDammit
 
+try:
+    from PIL import Image, ImageDraw
+except:
+    cmd = f'"{sys.executable}" -m pip install pillow'
+    os.system(cmd)
+    from PIL import Image, ImageDraw
+
+try:
+    from qrcode import QRCode
+except:
+    cmd = f'"{sys.executable}" -m pip install qrcode'
+    os.system(cmd)
+    from qrcode import QRCode
+
+try:
+    from pyzbar.pyzbar import decode  as decode_qr_code
+except:
+    cmd = f'"{sys.executable}" -m pip install pyzbar'
+    os.system(cmd)
+    from pyzbar.pyzbar import decode as decode_qr_code
+
+try:
+    from colorama import init, Fore, Back, Style
+except:
+    cmd = f'"{sys.executable}" -m pip install colorama'
+    os.system(cmd)
+    from colorama import init, Fore, Back, Style
+
+from io import BytesIO
+import time, datetime
 import math
+import json
 import textwrap, binascii
 
+init()
+
 FILENAME_SIZE_BITS = 16
+
+def colored(text, color):
+    return f"{color}{text}{Style.RESET_ALL}"
 
 def simplify_image(img, width_factor, height_factor):
     new_h = img.shape[0] // height_factor
@@ -77,10 +113,10 @@ def to_image_binary(bin_data, width, height):
     max_bits -= leading_zeros_bits
 
     if len(bin_data) <= max_bits:
-        remaining = ""
+        remaining = []
     else:
-        remaining = bin_data[:(len(bin_data) - max_bits)]
-        bin_data = bin_data[len(remaining):]
+        remaining = bin_data[:-max_bits]
+        bin_data = bin_data[-max_bits::]
 
     leading_zeros = bin_data.index('1') if '1' in bin_data else len(bin_data)
     leading_zeros_bin = bin(leading_zeros)[2:].rjust(leading_zeros_bits, '0')
@@ -132,6 +168,39 @@ def read_binary_image(image, width_factor, height_factor):
     binary = fix_image_binary_leading_zeros(binary)
     return binary
 
+def create_frame(qr_img, width, height, bg_color):
+    img = Image.new("RGB", (width, height))
+
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, width, height), fill=bg_color)
+
+    center_width, center_height = qr_img.size
+
+    if width < height:
+        center_new_w = width
+        center_new_h = int(center_new_w / center_width * center_height)
+        qr_img = qr_img.resize((center_new_w, center_new_h))
+        center_width, center_height = center_new_w, center_new_h
+    else:
+        center_new_h = height
+        center_new_w = int(center_new_h / center_height * center_width)
+        qr_img = qr_img.resize((center_new_w, center_new_h))
+        center_width, center_height = center_new_w, center_new_h
+
+    x = int((width - center_width) / 2)
+    y = int((height - center_height) / 2)
+    img.paste(qr_img, (x, y))
+
+    return img
+
+def pil_to_cv2(pil_img):
+    file = BytesIO()
+    pil_img.save(file, format="png")
+    cv2_img = numpy.frombuffer(file.getvalue(), numpy.uint8)
+    cv2_img = cv2.imdecode(cv2_img, cv2.IMREAD_COLOR)
+    cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_RGB2BGR)
+    return cv2_img
+
 def encode(video_filename, filename, bin_data, width, height, fps, width_factor, height_factor):
     filename_bin = bytes_to_binary(filename.encode())
     filename_len = len(filename_bin)
@@ -141,28 +210,67 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
     bin_data = filename_len_bin + filename_bin + bin_data
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(video_filename, fourcc, fps, (width, height))
+    out = cv2.VideoWriter(video_filename, fourcc, fps, (width, height), isColor=False)
+
+    qr = QRCode()
+    data = {"width_factor": width_factor, "height_factor": height_factor}
+    qr.add_data(json.dumps(data))
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+    first_frame_img = create_frame(qr_img, width, height, (255, 255, 255))
+    first_frame = pil_to_cv2(first_frame_img)
+    first_frame = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+    out.write(first_frame)
 
     n = 0
+    s = time.time()
+    estimate_batch_size = 10
+
     while bin_data:
         frame, bin_data = make_binary_image(bin_data, width, height, width_factor, height_factor)
-        color_frame = cv2.merge((frame, frame, frame))
-        out.write(color_frame)
-        n += 1
-        print("Frames Encoded:", n)
-
-    while (n // fps) < 1:
-        frame = numpy.zeros((height, width, 3), dtype=numpy.uint8)
         out.write(frame)
         n += 1
-        print("Frames Encoded:", n)
+
+        if n == estimate_batch_size:
+            duration = (time.time() - s) / n
+            seconds = len(bin_data) * width_factor * height_factor / (width * height) * duration
+            end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+
+            mins = int(seconds / 60)
+            secs = int(seconds - (mins * 60))
+            hrs = int(mins / 60)
+            mins = int(mins - (hrs * 60))
+
+            print(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}")
+            print("Estimated End Time:", end_time)
+
+        elif n > estimate_batch_size:
+            print("Frames Encoded:", n)
+
+    while (n // fps) < 1:
+        frame = numpy.zeros((height, width), dtype=numpy.uint8)
+        out.write(frame)
+        n += 1
 
     out.release()
 
-def decode(filename, width_factor, height_factor):
+def decode(filename):
     binary = ""
 
     cap = cv2.VideoCapture(filename)
+    ret, first_frame = cap.read()
+
+    if not ret:
+        return "", binary
+
+    decoded = decode_qr_code(first_frame)
+
+    if not decoded:
+        return "", binary
+
+    decoded = json.loads(decoded[0].data)
+    width_factor = decoded["width_factor"]
+    height_factor = decoded["height_factor"]
 
     n = 0
     while True:
