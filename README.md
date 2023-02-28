@@ -4,9 +4,9 @@ A brief description of what this project does.
 
 ## Table of Contents
 
-- [How To Set It Up](#How To Set It Up)
-- [How To Use It](#How To Use It)
-- [How It Works](#How It Works)
+- [How To Set It Up](#how-to-set-it-up)
+- [How To Use It](#how-to-use-it)
+- [How It Works](#how-it-works)
 
 ## How To Set It Up
 
