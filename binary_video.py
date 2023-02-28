@@ -50,7 +50,7 @@ except:
     from qrcode import QRCode
 
 try:
-    from pyzbar.pyzbar import decode  as decode_qr_code
+    from pyzbar.pyzbar import decode as decode_qr_code
 except:
     cmd = f'"{sys.executable}" -m pip install pyzbar'
     os.system(cmd)
@@ -213,7 +213,7 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
     out = cv2.VideoWriter(video_filename, fourcc, fps, (width, height), isColor=False)
 
     qr = QRCode()
-    data = {"width_factor": width_factor, "height_factor": height_factor}
+    data = {"width_factor": width_factor, "height_factor": height_factor, "width": width, "height": height}
     qr.add_data(json.dumps(data))
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white")
@@ -258,6 +258,8 @@ def decode(filename):
     binary = ""
 
     cap = cv2.VideoCapture(filename)
+    num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     ret, first_frame = cap.read()
 
     if not ret:
@@ -271,8 +273,13 @@ def decode(filename):
     decoded = json.loads(decoded[0].data)
     width_factor = decoded["width_factor"]
     height_factor = decoded["height_factor"]
+    height = decoded.get("height", first_frame.shape[0])
+    width = decoded.get("width", first_frame.shape[1])
 
     n = 0
+    s = time.time()
+    estimate_batch_size = 10
+
     while True:
         ret, frame = cap.read()
 
@@ -280,12 +287,28 @@ def decode(filename):
             break
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        frame = cv2.resize(frame, (width, height))
         buffer = read_binary_image(frame, width_factor, height_factor)
 
         binary = buffer + binary
         #binary += buffer
         n += 1
-        print("Frames Decoded:", n)
+
+        if n == estimate_batch_size:
+            duration = (time.time() - s) / n
+            seconds = num_frames * duration
+            end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+
+            mins = int(seconds / 60)
+            secs = int(seconds - (mins * 60))
+            hrs = int(mins / 60)
+            mins = int(mins - (hrs * 60))
+
+            print(colored(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"Estimated End Time: {end_time}", Fore.LIGHTYELLOW_EX))
+
+        elif n > estimate_batch_size:
+            print("Frames Decoded:", n)
 
     filename_len_bin = binary[:FILENAME_SIZE_BITS]
     filename_len = int(filename_len_bin, 2)

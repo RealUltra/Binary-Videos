@@ -22,6 +22,9 @@ while True:
     elif inp == "2":
         mode = 1
         break
+    elif inp == "3":
+        mode = 2
+        break
     else:
         print(colored("[ERROR] Invalid Input!\n", Fore.RED))
 print()
@@ -77,8 +80,9 @@ if mode == 0:
         print(colored(f'[UPDATE] Writing "{binary_video_file}"', Fore.LIGHTBLUE_EX))
         encode(binary_video_file, os.path.basename(real_file), bin_data, width, height, fps, width_factor, height_factor)
         print(colored("[SUCCESS] Binary Video Created!", Fore.LIGHTGREEN_EX))
+        os.system('pause')
 
-else:
+elif mode == 1:
     binary_video_file = filedialog.askopenfilename(initialdir=".", title="Select Binary Video",
                                           filetypes=(("Video files", "*.avi;*.mp4;*.mkv;*.mov;*.wmv;*.flv;*.m4v"),), defaultextension='.mp4')
 
@@ -92,10 +96,16 @@ else:
             filename = file_name + "." + ext
             path = os.path.join(os.path.dirname(binary_video_file), filename)
 
-            with open(path, 'wb') as f:
-                f.write(data)
-
-            print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
+            try:
+                with open(path, 'wb') as f:
+                    f.write(data)
+                print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
+            except:
+                print(colored(f'[ERROR] Could not decode binary video!', Fore.RED))
 
         else:
             print(colored(f'[ERROR] Could not decode binary video!', Fore.RED))
+
+        os.system('pause')
+
+root.destroy()
