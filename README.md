@@ -13,7 +13,7 @@ My project was heavily inspired by [this project](https://github.com/DvorakDwarf
 - [Problems and Solutions](#problems-and-solutions)
 
 ## Example
-(https://www.youtube.com/watch?v=pT8qMJZUI0Y)
+[An example binary video is shown here](https://www.youtube.com/watch?v=pT8qMJZUI0Y)
 
 ## How To Set It Up
 
