@@ -59,7 +59,7 @@ if mode == 0:
             print(colored("[ERROR] Invalid Input!\n", Fore.RED))
     print()
 
-    width, height = 1280, 720
+    width, height = 1920, 1080
     fps = 30
 
     real_file = filedialog.askopenfilename(initialdir=".", title="Select Any File",
