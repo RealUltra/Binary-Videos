@@ -13,7 +13,7 @@ My project was heavily inspired by [this project](https://github.com/DvorakDwarf
 - [Problems and Solutions](#problems-and-solutions)
 
 ## Example
-[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/pT8qMJZUI0Y/1.jpg)](https://www.youtube.com/watch?v=pT8qMJZUI0Y)
+(https://www.youtube.com/watch?v=pT8qMJZUI0Y)
 
 ## How To Set It Up
 
