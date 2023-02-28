@@ -65,6 +65,7 @@ except:
 
 from io import BytesIO
 import time, datetime
+import uuid
 import math
 import json
 import textwrap, binascii
@@ -103,8 +104,7 @@ def binary_to_bytes(binary):
     data = n.to_bytes((n.bit_length() + 7) // 8, 'big')
     return data
 
-def to_image_binary(bin_data, width, height):
-    binary = ""
+def to_image_binary(bin_array, width, height):
     max_bits = height * width
 
     n = math.log((width * height), 2)
@@ -112,19 +112,19 @@ def to_image_binary(bin_data, width, height):
 
     max_bits -= leading_zeros_bits
 
-    if len(bin_data) <= max_bits:
-        remaining = []
+    if bin_array.shape[0] <= max_bits:
+        remaining = numpy.array([], dtype=numpy.uint8)
     else:
-        remaining = bin_data[:-max_bits]
-        bin_data = bin_data[-max_bits::]
+        remaining = bin_array[max_bits:]
+        bin_array = bin_array[:max_bits]
 
-    leading_zeros = bin_data.index('1') if '1' in bin_data else len(bin_data)
+    leading_zeros = numpy.argmax(bin_array) if 1 in bin_array else bin_array.shape[0]
     leading_zeros_bin = bin(leading_zeros)[2:].rjust(leading_zeros_bits, '0')
-    binary += leading_zeros_bin
-    bin_data = remove_leading_zeros(bin_data)
+    leading_zeros_arr = numpy.frombuffer(leading_zeros_bin.encode(), dtype=numpy.uint8) - 48
+    bin_array = bin_array[leading_zeros:]
 
-    bin_data = bin_data.rjust(max_bits, '0')
-    binary += bin_data
+    bin_array = numpy.pad(bin_array, (max_bits - bin_array.shape[0], 0), mode='constant', constant_values=0)
+    binary = numpy.concatenate([leading_zeros_arr, bin_array])
 
     return binary, remaining
 
@@ -132,21 +132,21 @@ def fix_image_binary_leading_zeros(binary):
     n = math.log(len(binary), 2)
     leading_zeros_bits = int(n) if int(n) == n else int(n) + 1
 
-    leading_zeros_bin = binary[:leading_zeros_bits]
+    leading_zeros_bin = bytearray(binary[:leading_zeros_bits] + 48)
     leading_zeros = int(leading_zeros_bin, 2)
     binary = binary[leading_zeros_bits:]
     binary = remove_leading_zeros(binary)
-    binary = ("0" * leading_zeros) + binary
+    binary = numpy.concatenate([numpy.zeros((leading_zeros,), dtype=numpy.uint8), binary])
+
     return binary
 
-def make_binary_image(bin_data, img_width, img_height, width_factor, height_factor):
+def make_binary_image(bin_array, img_width, img_height, width_factor, height_factor):
     width = img_width // width_factor
     height = img_height // height_factor
 
-    binary, remaining = to_image_binary(bin_data, width, height)
+    binary, remaining = to_image_binary(bin_array, width, height)
 
-    image = numpy.array(list(binary), dtype=numpy.uint8)
-    image = image.reshape((height, width))
+    image = binary.reshape((height, width))
     image = numpy.where(image == 0, 0, 255).astype(numpy.uint8)
 
     complex_image = complexify_image(image, width_factor, height_factor)
@@ -158,13 +158,17 @@ def load_binary_image(file_path):
     return cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
 
 def remove_leading_zeros(binary):
-    return binary.lstrip("0")
+    if type(binary) == str:
+        return binary.lstrip("0")
+    elif type(binary) == numpy.ndarray:
+        leading_zeros = numpy.argmax(binary) if 1 in binary else binary.shape[0]
+        return binary[leading_zeros:]
 
 def read_binary_image(image, width_factor, height_factor):
     bits = numpy.where(image <= 128, 0, 1).astype(numpy.float32)
     simple_bits = simplify_image(bits, width_factor, height_factor)
     bits = numpy.where(simple_bits <= 0.5, 0, 1).astype(numpy.uint8)
-    binary = ''.join(bits.flatten().astype(str))
+    binary = bits.flatten()
     binary = fix_image_binary_leading_zeros(binary)
     return binary
 
@@ -224,10 +228,13 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
 
     n = 0
     s = time.time()
-    estimate_batch_size = 10
+    estimate_batch_size = 30
+    display_n_factor = 20
 
-    while bin_data:
-        frame, bin_data = make_binary_image(bin_data, width, height, width_factor, height_factor)
+    bin_array = numpy.frombuffer(bin_data.encode(), dtype=numpy.uint8) - 48
+
+    while bin_array.shape[0]:
+        frame, bin_array = make_binary_image(bin_array, width, height, width_factor, height_factor)
         out.write(frame)
         n += 1
 
@@ -241,11 +248,12 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
             hrs = int(mins / 60)
             mins = int(mins - (hrs * 60))
 
-            print(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}")
-            print("Estimated End Time:", end_time)
+            print(colored(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"Estimated End Time: {end_time}", Fore.LIGHTYELLOW_EX))
 
         elif n > estimate_batch_size:
-            print("Frames Encoded:", n)
+            if n % display_n_factor == 0:
+                print("Frames Encoded:", n)
 
     while (n // fps) < 1:
         frame = numpy.zeros((height, width), dtype=numpy.uint8)
@@ -255,7 +263,8 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
     out.release()
 
 def decode(filename):
-    binary = ""
+    binary = numpy.array([], dtype=numpy.uint8)
+    binary = bytearray()
 
     cap = cv2.VideoCapture(filename)
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -278,7 +287,8 @@ def decode(filename):
 
     n = 0
     s = time.time()
-    estimate_batch_size = 10
+    estimate_batch_size = 30
+    display_n_factor = 20
 
     while True:
         ret, frame = cap.read()
@@ -288,10 +298,11 @@ def decode(filename):
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         frame = cv2.resize(frame, (width, height))
-        buffer = read_binary_image(frame, width_factor, height_factor)
 
-        binary = buffer + binary
-        #binary += buffer
+        buffer = read_binary_image(frame, width_factor, height_factor)
+        #binary = numpy.hstack((buffer, binary))
+        binary.extend(buffer + 48)
+
         n += 1
 
         if n == estimate_batch_size:
@@ -304,17 +315,21 @@ def decode(filename):
             hrs = int(mins / 60)
             mins = int(mins - (hrs * 60))
 
+            print(colored(f"Number of Frames: {num_frames}", Fore.LIGHTYELLOW_EX))
             print(colored(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
             print(colored(f"Estimated End Time: {end_time}", Fore.LIGHTYELLOW_EX))
 
         elif n > estimate_batch_size:
-            print("Frames Decoded:", n)
+            if n % display_n_factor == 0:
+                print("Frames Decoded:", n)
 
-    filename_len_bin = binary[:FILENAME_SIZE_BITS]
+    #binary += 48
+
+    filename_len_bin = bytearray(binary[:FILENAME_SIZE_BITS])
     filename_len = int(filename_len_bin, 2)
-    filename_bin = binary[FILENAME_SIZE_BITS : FILENAME_SIZE_BITS+filename_len]
+    filename_bin = bytearray(binary[FILENAME_SIZE_BITS : FILENAME_SIZE_BITS+filename_len])
     filename_bytes = binary_to_bytes(filename_bin)
     filename = remove_non_utf8_chars(filename_bytes).decode()
-    binary = binary[FILENAME_SIZE_BITS+filename_len:]
+    binary = bytearray(binary[FILENAME_SIZE_BITS+filename_len:])
 
     return filename, binary_to_bytes(binary)
