@@ -4,10 +4,7 @@ from tkinter import filedialog
 import os
 import sys
 
-def split_filename(filename):
-    split = filename.split('.')
-    return ".".join(split[:-1]), split[-1]
-
+os.system("cls")
 print(colored("###### BINARY VIDEO CREATOR #######\n", Fore.GREEN))
 
 mode = 0
@@ -72,13 +69,14 @@ if mode == 0:
                                           filetypes=(("Binary Video", "*.mp4"),), defaultextension='.mp4')
 
     if binary_video_file:
-        data = open(real_file, 'rb').read()
-        bin_data = bytes_to_binary(data)
-        print(colored(f"Bits: {len(bin_data)}", Fore.LIGHTYELLOW_EX))
-        estimated_frames = int(len(bin_data) * width_factor * height_factor / (width * height)) + 1
-        print(colored(f"Estimated Frames: {estimated_frames}", Fore.LIGHTYELLOW_EX))
+        #data = open(real_file, 'rb').read()
+        #bin_data = bytes_to_binary(data)
+        #print(colored(f"Bits: {len(bin_data)}", Fore.LIGHTYELLOW_EX))
+        #estimated_frames = int(len(bin_data) * width_factor * height_factor / (width * height)) + 1
+        #print(colored(f"Estimated Frames: {estimated_frames}", Fore.LIGHTYELLOW_EX))
+
         print(colored(f'[UPDATE] Writing "{binary_video_file}"', Fore.LIGHTBLUE_EX))
-        encode(binary_video_file, os.path.basename(real_file), bin_data, width, height, fps, width_factor, height_factor)
+        encode(binary_video_file, real_file, width, height, fps, width_factor, height_factor)
         print(colored("[SUCCESS] Binary Video Created!", Fore.LIGHTGREEN_EX))
         os.system('pause')
 
@@ -88,21 +86,10 @@ elif mode == 1:
 
     if os.path.exists(binary_video_file):
         print(colored(f'[UPDATE] Reading "{binary_video_file}"', Fore.LIGHTBLUE_EX))
-        filename, data = decode(binary_video_file)
+        filename = decode(binary_video_file)
 
-        if filename and data:
-            file_name, ext = split_filename(filename)
-            file_name = file_name + " [Recovered]"
-            filename = file_name + "." + ext
-            path = os.path.join(os.path.dirname(binary_video_file), filename)
-
-            try:
-                with open(path, 'wb') as f:
-                    f.write(data)
-                print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
-            except:
-                print(colored(f'[ERROR] Could not decode binary video!', Fore.RED))
-
+        if filename:
+            print(colored(f'[SUCCESS] "{filename}" Saved!', Fore.LIGHTGREEN_EX))
         else:
             print(colored(f'[ERROR] Could not decode binary video!', Fore.RED))
 

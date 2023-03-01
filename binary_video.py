@@ -77,6 +77,10 @@ FILENAME_SIZE_BITS = 16
 def colored(text, color):
     return f"{color}{text}{Style.RESET_ALL}"
 
+def split_filename(filename):
+    split = filename.split('.')
+    return ".".join(split[:-1]), split[-1]
+
 def simplify_image(img, width_factor, height_factor):
     new_h = img.shape[0] // height_factor
     new_w = img.shape[1] // width_factor
@@ -97,11 +101,12 @@ def split_binary(binary, bits=8):
     return binary_values
 
 def bytes_to_binary(data):
-    return bin(int(binascii.hexlify(data), 16))[2:]
+    binary = bin(int(binascii.hexlify(data), 16))[2:].rjust(len(data) * 8, '0')
+    return binary
 
 def binary_to_bytes(binary):
     n = int(binary, 2)
-    data = n.to_bytes((n.bit_length() + 7) // 8, 'big')
+    data = n.to_bytes(len(binary) // 8, 'big')
     return data
 
 def to_image_binary(bin_array, width, height):
@@ -205,16 +210,20 @@ def pil_to_cv2(pil_img):
     cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_RGB2BGR)
     return cv2_img
 
-def encode(video_filename, filename, bin_data, width, height, fps, width_factor, height_factor):
+def encode(video_file, actual_file, width, height, fps, width_factor, height_factor):
+    bin_size = os.path.getsize(actual_file)
+
+    filename = os.path.basename(actual_file)
     filename_bin = bytes_to_binary(filename.encode())
     filename_len = len(filename_bin)
     filename_len_bin = bin(filename_len)[2:]
     filename_len_bin = filename_len_bin.rjust(FILENAME_SIZE_BITS, '0')
 
-    bin_data = filename_len_bin + filename_bin + bin_data
+    bin_data = filename_len_bin + filename_bin
+    bin_array = numpy.frombuffer(bin_data.encode(), dtype=numpy.uint8) - 48
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(video_filename, fourcc, fps, (width, height), isColor=False)
+    out = cv2.VideoWriter(video_file, fourcc, fps, (width, height), isColor=False)
 
     qr = QRCode()
     data = {"width_factor": width_factor, "height_factor": height_factor, "width": width, "height": height}
@@ -226,21 +235,28 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
     first_frame = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
     out.write(first_frame)
 
+    estimated_frames = int(bin_size * 8 * width_factor * height_factor / (width * height)) + 1
+    last_percent = 0
     n = 0
     s = time.time()
     estimate_batch_size = 30
-    display_n_factor = 20
 
-    bin_array = numpy.frombuffer(bin_data.encode(), dtype=numpy.uint8) - 48
+    file = open(actual_file, 'rb')
 
     while bin_array.shape[0]:
+        buffer = file.read(int(width * height / width_factor / height_factor / 8) + 1)
+
+        if buffer:
+            buffer_arr = numpy.frombuffer(bytes_to_binary(buffer).encode(), dtype=numpy.uint8) - 48
+            bin_array = numpy.hstack((bin_array, buffer_arr))
+
         frame, bin_array = make_binary_image(bin_array, width, height, width_factor, height_factor)
         out.write(frame)
         n += 1
 
         if n == estimate_batch_size:
             duration = (time.time() - s) / n
-            seconds = len(bin_data) * width_factor * height_factor / (width * height) * duration
+            seconds = estimated_frames * duration
             end_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
 
             mins = int(seconds / 60)
@@ -248,12 +264,17 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
             hrs = int(mins / 60)
             mins = int(mins - (hrs * 60))
 
-            print(colored(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
-            print(colored(f"Estimated End Time: {end_time}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Bits] {bin_size * 8}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Estimated Frames] {estimated_frames}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Estimated Process Duration] {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Estimated End Time] {end_time}", Fore.LIGHTYELLOW_EX))
 
         elif n > estimate_batch_size:
-            if n % display_n_factor == 0:
-                print("Frames Encoded:", n)
+            percent = int(n / estimated_frames * 100)
+
+            if percent != last_percent:
+                print(f"[Encoding] {percent}% Complete!")
+                last_percent = percent
 
     while (n // fps) < 1:
         frame = numpy.zeros((height, width), dtype=numpy.uint8)
@@ -262,9 +283,18 @@ def encode(video_filename, filename, bin_data, width, height, fps, width_factor,
 
     out.release()
 
-def decode(filename):
-    binary = numpy.array([], dtype=numpy.uint8)
+    seconds = time.time() - s
+    mins = int(seconds / 60)
+    secs = int(seconds - (mins * 60))
+    hrs = int(mins / 60)
+    mins = int(mins - (hrs * 60))
+    print(colored(f"[Encoding Time] {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+
+def decode(filename, output_dir=None):
     binary = bytearray()
+
+    if not output_dir:
+        output_dir = os.path.dirname(filename)
 
     cap = cv2.VideoCapture(filename)
     num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -288,7 +318,12 @@ def decode(filename):
     n = 0
     s = time.time()
     estimate_batch_size = 30
-    display_n_factor = 20
+    last_percent = 0
+
+    file = None
+    filename_length = 0
+    filename = None
+    temp_filename = None
 
     while True:
         ret, frame = cap.read()
@@ -300,8 +335,31 @@ def decode(filename):
         frame = cv2.resize(frame, (width, height))
 
         buffer = read_binary_image(frame, width_factor, height_factor)
-        #binary = numpy.hstack((buffer, binary))
         binary.extend(buffer + 48)
+
+        if not file:
+            if not filename_length and len(binary) >= FILENAME_SIZE_BITS:
+                filename_len_bin = bytearray(binary[:FILENAME_SIZE_BITS])
+                filename_length = int(filename_len_bin, 2)
+                binary = bytearray(binary[FILENAME_SIZE_BITS:])
+
+            if filename_length and len(binary) >= filename_length:
+                filename_bin = bytearray(binary[:filename_length])
+                filename_bytes = binary_to_bytes(filename_bin)
+                filename = remove_non_utf8_chars(filename_bytes).decode()
+                binary = bytearray(binary[filename_length:])
+
+                file_name, file_ext = split_filename(filename)
+                temp_filename = f"{file_name} [Recovering].{file_ext}"
+                file = open(os.path.join(output_dir, temp_filename), 'wb')
+
+        if file:
+            if (len(binary) // 8) > 0:
+                bin_len = len(binary) // 8 * 8
+                buffer = bytearray(binary[:bin_len])
+                buffer_bytes = binary_to_bytes(buffer)
+                file.write(buffer_bytes)
+                binary = bytearray(binary[bin_len:])
 
         n += 1
 
@@ -315,21 +373,28 @@ def decode(filename):
             hrs = int(mins / 60)
             mins = int(mins - (hrs * 60))
 
-            print(colored(f"Number of Frames: {num_frames}", Fore.LIGHTYELLOW_EX))
-            print(colored(f"Estimated Process Duration: {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
-            print(colored(f"Estimated End Time: {end_time}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Frames] {num_frames}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Estimated Process Duration] {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+            print(colored(f"[Estimated End Time] {end_time}", Fore.LIGHTYELLOW_EX))
 
         elif n > estimate_batch_size:
-            if n % display_n_factor == 0:
-                print("Frames Decoded:", n)
+            percent = int(n / num_frames * 100)
 
-    #binary += 48
+            if percent != last_percent:
+                print(f"[Decoding] {percent}% Complete!")
+                last_percent = percent
 
-    filename_len_bin = bytearray(binary[:FILENAME_SIZE_BITS])
-    filename_len = int(filename_len_bin, 2)
-    filename_bin = bytearray(binary[FILENAME_SIZE_BITS : FILENAME_SIZE_BITS+filename_len])
-    filename_bytes = binary_to_bytes(filename_bin)
-    filename = remove_non_utf8_chars(filename_bytes).decode()
-    binary = bytearray(binary[FILENAME_SIZE_BITS+filename_len:])
+    file.close()
 
-    return filename, binary_to_bytes(binary)
+    seconds = time.time() - s
+    mins = int(seconds / 60)
+    secs = int(seconds - (mins * 60))
+    hrs = int(mins / 60)
+    mins = int(mins - (hrs * 60))
+    print(colored(f"[Decoding Time] {hrs:02d}:{mins:02d}:{secs:02d}", Fore.LIGHTYELLOW_EX))
+
+    file_name, file_ext = split_filename(filename)
+    filename = f"{file_name} [Recovered].{file_ext}"
+    os.rename(os.path.join(output_dir, temp_filename), os.path.join(output_dir, filename))
+
+    return filename
