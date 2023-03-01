@@ -282,6 +282,7 @@ def encode(video_file, actual_file, width, height, fps, width_factor, height_fac
         n += 1
 
     out.release()
+    file.close()
 
     seconds = time.time() - s
     mins = int(seconds / 60)
