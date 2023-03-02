@@ -2,7 +2,7 @@
 
 This project allows you to convert any file into a video that I call a binary video. This video can then be uploaded to YouTube as a way of infinite free cloud. Other cloud storage services such as Dropbox and Google Drive charge you money to store large files. However, YouTube allows an infinite number of videos to be uploaded to a channel for free and each video can be upto 256 GB. This makes YouTube the cheapest way to store your data. 
 
-My project was heavily inspired by [this project](https://github.com/DvorakDwarf/Infinite-Storage-Glitch)
+My project was heavily inspired by [this project.](https://github.com/DvorakDwarf/Infinite-Storage-Glitch)
 
 ## Table of Contents
 
@@ -13,7 +13,7 @@ My project was heavily inspired by [this project](https://github.com/DvorakDwarf
 - [Problems and Solutions](#problems-and-solutions)
 
 ## Example
-[An example binary video is shown here](https://www.youtube.com/watch?v=pT8qMJZUI0Y)
+[An example binary video is shown here.](https://www.youtube.com/watch?v=5rTwkexq1ms)
 
 ## How To Set It Up
 
